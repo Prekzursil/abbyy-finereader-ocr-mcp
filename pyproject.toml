@@ -1,0 +1,28 @@
+[project]
+name = "ocr-mcp"
+version = "0.1.0"
+description = "Multi-engine OCR MCP server (RapidOCR, Tesseract, ABBYY FineReader 16) with accuracy evaluation."
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.27",
+    "rapidocr-onnxruntime>=1.4",
+    "onnxruntime>=1.26",
+    "pytesseract>=0.3.13",
+    "Pillow>=11",
+    "numpy>=2",
+    "pymupdf>=1.27",
+    "jiwer>=4",
+    "opencv-python-headless>=4.10",
+    "pyperclip>=1.9",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
+pythonpath = ["."]
+
+[tool.setuptools]
+py-modules = ["index", "engines", "evaluation"]
