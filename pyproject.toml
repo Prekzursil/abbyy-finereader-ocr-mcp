@@ -1,5 +1,5 @@
 [project]
-name = "ocr-mcp"
+name = "abbyy-finereader-ocr-mcp"
 version = "0.1.0"
 description = "Multi-engine OCR MCP server (RapidOCR, Tesseract, ABBYY FineReader 16) with accuracy evaluation."
 requires-python = ">=3.12"

@@ -1,4 +1,4 @@
-# ocr-mcp — Multi-Engine OCR MCP Server
+# abbyy-finereader-ocr-mcp — Multi-Engine OCR MCP Server
 
 A [Model Context Protocol](https://modelcontextprotocol.io) server that gives AI
 assistants (Claude Code, Codex, Cursor, …) **OCR with first-class accuracy handling
@@ -53,8 +53,8 @@ compare them:
 ## Install
 
 ```bash
-git clone https://github.com/Prekzursil/ocr-mcp
-cd ocr-mcp
+git clone https://github.com/Prekzursil/abbyy-finereader-ocr-mcp
+cd abbyy-finereader-ocr-mcp
 uv venv --python 3.12
 uv pip install -e .
 # (first OCR call downloads the small RapidOCR ONNX models, ~?? MB, cached locally)
@@ -64,7 +64,7 @@ uv pip install -e .
 
 ### Claude Code
 ```bash
-claude mcp add ocr -s user -- "/abs/path/ocr-mcp/.venv/Scripts/python.exe" "/abs/path/ocr-mcp/index.py"
+claude mcp add ocr -s user -- "/abs/path/abbyy-finereader-ocr-mcp/.venv/Scripts/python.exe" "/abs/path/abbyy-finereader-ocr-mcp/index.py"
 ```
 
 ### Codex (`~/.codex/config.toml`)
