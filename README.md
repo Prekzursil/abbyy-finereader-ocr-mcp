@@ -70,8 +70,8 @@ claude mcp add ocr -s user -- "/abs/path/abbyy-finereader-ocr-mcp/.venv/Scripts/
 ### Codex (`~/.codex/config.toml`)
 ```toml
 [mcp_servers.ocr]
-command = "D:\\path\\ocr-mcp\\.venv\\Scripts\\python.exe"
-args = ["D:\\path\\ocr-mcp\\index.py"]
+command = "D:\\path\\abbyy-finereader-ocr-mcp\\.venv\\Scripts\\python.exe"
+args = ["D:\\path\\abbyy-finereader-ocr-mcp\\index.py"]
 startup_timeout_sec = 60
 tool_timeout_sec = 300
 
