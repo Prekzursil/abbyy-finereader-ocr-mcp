@@ -336,7 +336,7 @@ def test_finereader_proc_exit_settle_success(monkeypatch, tmp_path):
         return "SETTLED TEXT" if calls["n"] > 4 else ""
 
     _setup_finereader(monkeypatch, paste_behaviour=paste, poll_val=0, terminate_exc=RuntimeError("reap"))
-    r = eng.FineReaderEngine().ocr_image(_real_file(tmp_path), timeout_s=10)
+    r = eng.FineReaderEngine(timeout_s=10).ocr_image(_real_file(tmp_path))
     assert r.text == "SETTLED TEXT"
 
 
@@ -345,13 +345,13 @@ def test_finereader_paste_raises_then_settle_empty_error(monkeypatch, tmp_path):
         raise RuntimeError("clip dead")
 
     _setup_finereader(monkeypatch, paste_behaviour=paste, poll_val=0)
-    r = eng.FineReaderEngine().ocr_image(_real_file(tmp_path), timeout_s=10)
+    r = eng.FineReaderEngine(timeout_s=10).ocr_image(_real_file(tmp_path))
     assert r.error.startswith("no clipboard result")
 
 
 def test_finereader_timeout_no_result(monkeypatch, tmp_path):
     _setup_finereader(monkeypatch, paste_behaviour=lambda: "", poll_val=None)
-    r = eng.FineReaderEngine().ocr_image(_real_file(tmp_path), timeout_s=2)
+    r = eng.FineReaderEngine(timeout_s=2).ocr_image(_real_file(tmp_path))
     assert r.error.startswith("no clipboard result")
 
 
