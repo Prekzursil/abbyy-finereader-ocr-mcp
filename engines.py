@@ -243,6 +243,11 @@ class FineReaderEngine(Engine):
     name = "finereader"
     INSTALL = r"C:\Program Files\ABBYY FineReader 16"
 
+    def __init__(self, timeout_s: int = 120) -> None:
+        # Clipboard-poll timeout lives on the instance so ocr_image keeps the
+        # base Engine.ocr_image(path, lang) signature (Liskov-compatible).
+        self.timeout_s = timeout_s
+
     def _exe(self) -> str | None:
         cand = Path(self.INSTALL) / "FineReaderOCR.exe"
         if cand.is_file():
@@ -256,7 +261,7 @@ class FineReaderEngine(Engine):
             return False, "ABBYY FineReader 16 not found at default path"
         return True, f"ready (Regular CLI clipboard mode; {exe})"
 
-    def ocr_image(self, path: str, lang: str = "en", timeout_s: int = 120) -> OcrResult:
+    def ocr_image(self, path: str, lang: str = "en") -> OcrResult:
         r = OcrResult(engine=self.name)
         if not Path(path).is_file():
             r.error = f"file not found: {path}"
@@ -265,6 +270,7 @@ class FineReaderEngine(Engine):
         if not exe:
             r.error = "FineReader not found"
             return r
+        timeout_s = self.timeout_s
         try:
             import pyperclip
 
