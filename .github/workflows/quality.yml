@@ -1,0 +1,89 @@
+name: quality
+
+# Lean quality gate (single required check). Six gates, all must pass:
+#   1. lint + format + sec-lint  (Ruff: check, format --check, S* security rules)
+#   2. types                     (basedpyright, standard mode, on shipped modules)
+#   3. tests + STRICT 100% line+branch coverage (pytest + coverage fail_under=100)
+#   4. SAST                      (Semgrep CE: p/python + p/security-audit, --error)
+#   5. secrets                   (gitleaks over full git history)
+#   6. deps                      (osv-scanner over the resolved dependency set)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  OSV_SCANNER_VERSION: "2.4.0"
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for secret scan)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install project + tooling
+        run: |
+          python -m pip install --upgrade pip
+          # Full runtime deps so the type-checker can resolve every import.
+          pip install -e .
+          pip install pytest pytest-cov ruff basedpyright semgrep
+
+      # ---- Gate 1: lint + format + security lint ----------------------------
+      - name: Ruff lint (incl. flake8-bandit S* rules)
+        run: ruff check --output-format=github .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      # ---- Gate 2: types ---------------------------------------------------
+      - name: basedpyright
+        run: basedpyright
+
+      # ---- Gate 3: tests + strict 100% line+branch coverage ----------------
+      - name: Pytest with 100% coverage gate
+        run: pytest --cov --cov-branch --cov-report=term-missing
+
+      # ---- Gate 4: SAST ----------------------------------------------------
+      - name: Semgrep CE (SAST)
+        run: semgrep scan --config p/python --config p/security-audit --error --metrics off .
+
+      # ---- Gate 5: secrets -------------------------------------------------
+      - name: Install gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tgz
+          tar -xzf gitleaks.tgz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks.tgz gitleaks
+      - name: Gitleaks (full history)
+        run: gitleaks detect --no-banner --redact --verbose
+
+      # ---- Gate 6: deps ----------------------------------------------------
+      - name: Install osv-scanner
+        run: |
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o osv-scanner
+          sudo install osv-scanner /usr/local/bin/osv-scanner
+          rm -f osv-scanner
+      - name: Resolve dependency set
+        run: pip freeze | grep -vE '^-e ' > requirements.txt
+      - name: osv-scanner (dependency vulnerabilities)
+        run: osv-scanner scan source -L requirements.txt:requirements.txt

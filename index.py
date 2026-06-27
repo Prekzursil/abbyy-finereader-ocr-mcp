@@ -5,8 +5,10 @@ Tools: list_engines, ocr_image, ocr_pdf, batch_ocr, compare_engines, evaluate_ac
 
 Run: python index.py   (stdio MCP transport)
 """
+
 from __future__ import annotations
 
+import contextlib
 import glob as _glob
 import json
 import os
@@ -124,14 +126,19 @@ def ocr_pdf(path: str, engine: str = "auto", lang: str = "en", pages: str = "all
             texts.append(res.get("text", ""))
     finally:
         for img in imgs:  # clean up rasterized page temp files
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(img)
-            except OSError:
-                pass
-    return json.dumps({
-        "engine": name, "notes": notes, "page_count": len(imgs),
-        "pages": page_results, "full_text": "\n\n".join(texts),
-    }, indent=2, ensure_ascii=False)
+    return json.dumps(
+        {
+            "engine": name,
+            "notes": notes,
+            "page_count": len(imgs),
+            "pages": page_results,
+            "full_text": "\n\n".join(texts),
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
 
 
 @mcp.tool()
@@ -156,15 +163,25 @@ def batch_ocr(paths_or_glob: str, engine: str = "auto", lang: str = "en") -> str
     if _ALLOWED:
         blocked = [p for p in paths if _check_path(p)]
         if blocked:
-            return json.dumps({"error": f"{len(blocked)} path(s) outside OCR_MCP_ALLOWED_DIRS", "examples": blocked[:3]})
+            return json.dumps(
+                {
+                    "error": f"{len(blocked)} path(s) outside OCR_MCP_ALLOWED_DIRS",
+                    "examples": blocked[:3],
+                }
+            )
     results = []
     for p in paths:
         res = ENGINES[name].ocr_image(p, lang=lang).to_dict()
-        results.append({"path": p, "text": res.get("text", ""),
-                        "mean_confidence": res.get("mean_confidence"),
-                        "ok": res.get("ok"), "error": res.get("error")})
-    return json.dumps({"engine": name, "count": len(results), "results": results},
-                      indent=2, ensure_ascii=False)
+        results.append(
+            {
+                "path": p,
+                "text": res.get("text", ""),
+                "mean_confidence": res.get("mean_confidence"),
+                "ok": res.get("ok"),
+                "error": res.get("error"),
+            }
+        )
+    return json.dumps({"engine": name, "count": len(results), "results": results}, indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -183,19 +200,24 @@ def compare_engines(path: str, lang: str = "en") -> str:
             per[name] = {"available": False}
             continue
         res = eng.ocr_image(path, lang=lang)
-        per[name] = {"available": True, "ok": res.ok, "error": res.error,
-                     "text": res.text, "mean_confidence": res.mean_confidence,
-                     "elapsed_s": res.elapsed_s}
+        per[name] = {
+            "available": True,
+            "ok": res.ok,
+            "error": res.error,
+            "text": res.text,
+            "mean_confidence": res.mean_confidence,
+            "elapsed_s": res.elapsed_s,
+        }
         if res.ok and res.text:
             texts[name] = res.text
     agreement = _eval.cross_agreement(texts)
-    return json.dumps({"path": path, "engines": per, "agreement": agreement},
-                      indent=2, ensure_ascii=False)
+    return json.dumps({"path": path, "engines": per, "agreement": agreement}, indent=2, ensure_ascii=False)
 
 
 @mcp.tool()
-def evaluate_accuracy(ground_truth_path: str, ocr_text: str = "", ocr_path: str = "",
-                      engine: str = "auto", lang: str = "en") -> str:
+def evaluate_accuracy(
+    ground_truth_path: str, ocr_text: str = "", ocr_path: str = "", engine: str = "auto", lang: str = "en"
+) -> str:
     """Score OCR output against a ground-truth text file (CER/WER).
 
     Provide EITHER `ocr_text` (already-extracted text) OR `ocr_path` (an image/PDF
@@ -234,5 +256,5 @@ def evaluate_accuracy(ground_truth_path: str, ocr_text: str = "", ocr_path: str 
     return json.dumps(metrics, indent=2, ensure_ascii=False)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - stdio entrypoint, not unit-testable
     mcp.run()

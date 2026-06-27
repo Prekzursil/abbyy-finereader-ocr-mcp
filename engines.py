@@ -16,6 +16,7 @@ Engines:
                       flashes and it is one-document-at-a-time. Headless file output
                       needs ABBYY's paid Extended CLI license (auto-used if present).
 """
+
 from __future__ import annotations
 
 import shutil
@@ -25,18 +26,40 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
-
 # ---- language code maps (canonical = ISO 639-1 'en','de','fr',...) -----------
 _TESS_LANG = {
-    "en": "eng", "de": "deu", "fr": "fra", "es": "spa", "it": "ita",
-    "pt": "por", "nl": "nld", "ru": "rus", "ro": "ron", "pl": "pol",
-    "ja": "jpn", "ko": "kor", "zh": "chi_sim", "ar": "ara", "uk": "ukr",
+    "en": "eng",
+    "de": "deu",
+    "fr": "fra",
+    "es": "spa",
+    "it": "ita",
+    "pt": "por",
+    "nl": "nld",
+    "ru": "rus",
+    "ro": "ron",
+    "pl": "pol",
+    "ja": "jpn",
+    "ko": "kor",
+    "zh": "chi_sim",
+    "ar": "ara",
+    "uk": "ukr",
 }
 _FR_LANG = {  # ABBYY FineReader uses full English language names
-    "en": "English", "de": "German", "fr": "French", "es": "Spanish",
-    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
-    "ro": "Romanian", "pl": "Polish", "ja": "Japanese", "ko": "Korean",
-    "zh": "ChineseSimplified", "ar": "Arabic", "uk": "Ukrainian",
+    "en": "English",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "ru": "Russian",
+    "ro": "Romanian",
+    "pl": "Polish",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh": "ChineseSimplified",
+    "ar": "Arabic",
+    "uk": "Ukrainian",
 }
 
 LOW_CONFIDENCE = 0.60  # lines/words below this are flagged
@@ -76,9 +99,11 @@ class OcrResult:
             "line_count": len(self.lines),
             "low_confidence_count": len(self.low_confidence_lines()),
             "lines": [
-                {"text": ln.text,
-                 "confidence": (round(ln.confidence, 4) if ln.confidence is not None else None),
-                 "bbox": ln.bbox}
+                {
+                    "text": ln.text,
+                    "confidence": (round(ln.confidence, 4) if ln.confidence is not None else None),
+                    "bbox": ln.bbox,
+                }
                 for ln in self.lines
             ],
             "warnings": self.warnings,
@@ -111,13 +136,15 @@ class RapidOCREngine(Engine):
     def _get(self):
         if self._engine is None:
             from rapidocr_onnxruntime import RapidOCR
+
             self._engine = RapidOCR()
         return self._engine
 
     def available(self) -> tuple[bool, str]:
         try:
-            import rapidocr_onnxruntime  # noqa: F401
             import onnxruntime  # noqa: F401
+            import rapidocr_onnxruntime  # noqa: F401
+
             return True, "ready (onnxruntime, PaddleOCR models, local/headless)"
         except Exception as e:  # pragma: no cover
             return False, f"import failed: {e}"
@@ -139,7 +166,7 @@ class RapidOCREngine(Engine):
             for item in out:
                 # RapidOCR item = [box, text, score]
                 box, txt, score = item[0], item[1], float(item[2])
-                r.lines.append(OcrLine(text=txt, confidence=score, bbox=box))
+                r.lines.append(OcrLine(text=str(txt), confidence=score, bbox=list(box)))
                 confs.append(score)
             r.text = "\n".join(ln.text for ln in r.lines)
             r.mean_confidence = self._mean(confs)
@@ -180,6 +207,7 @@ class TesseractEngine(Engine):
         try:
             import pytesseract
             from PIL import Image
+
             pytesseract.pytesseract.tesseract_cmd = exe
             tlang = _TESS_LANG.get(lang, lang)
             t0 = time.time()
@@ -194,8 +222,12 @@ class TesseractEngine(Engine):
                 if not txt or conf < 0:
                     continue
                 c = conf / 100.0
-                bbox = [data["left"][i], data["top"][i],
-                        data["left"][i] + data["width"][i], data["top"][i] + data["height"][i]]
+                bbox = [
+                    data["left"][i],
+                    data["top"][i],
+                    data["left"][i] + data["width"][i],
+                    data["top"][i] + data["height"][i],
+                ]
                 r.lines.append(OcrLine(text=txt, confidence=c, bbox=bbox))
                 confs.append(c)
             r.text = "\n".join(ln.text for ln in r.lines)
@@ -235,6 +267,7 @@ class FineReaderEngine(Engine):
             return r
         try:
             import pyperclip
+
             frlang = _FR_LANG.get(lang, "English")
             r.warnings.append("FineReader Regular CLI: GUI may flash; result captured via clipboard.")
             # Write a unique sentinel so any value != sentinel is unambiguously new.
@@ -245,7 +278,11 @@ class FineReaderEngine(Engine):
                 sentinel = None
                 r.warnings.append("could not seed clipboard sentinel; result detection is best-effort")
             t0 = time.time()
-            proc = subprocess.Popen([exe, str(Path(path).resolve()), "/lang", frlang, "/send", "Clipboard"])
+            # noqa S603: local, trusted FineReader executable resolved from a fixed
+            # install dir; args are an OS-resolved file path and a fixed language name.
+            proc = subprocess.Popen(  # noqa: S603
+                [exe, str(Path(path).resolve()), "/lang", frlang, "/send", "Clipboard"]
+            )
             # poll clipboard until it holds something other than the sentinel
             text = ""
             deadline = time.time() + timeout_s
@@ -271,10 +308,13 @@ class FineReaderEngine(Engine):
             try:
                 proc.terminate()
                 proc.wait(timeout=5)  # reap so we don't leak a zombie/handle
-            except Exception:
+            except Exception:  # noqa: S110 - best-effort cleanup; nothing actionable to log
                 pass
             if not text:
-                r.error = "no clipboard result (FineReader may need a logged-in interactive session, or the doc produced no text)"
+                r.error = (
+                    "no clipboard result (FineReader may need a logged-in "
+                    "interactive session, or the doc produced no text)"
+                )
                 return r
             r.text = text.strip()
             r.lines = [OcrLine(text=line, confidence=None) for line in r.text.splitlines() if line.strip()]

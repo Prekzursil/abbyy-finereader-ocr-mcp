@@ -5,6 +5,7 @@
 - Optional preprocessing (grayscale / denoise / deskew) via opencv, applied to a
   temp copy; degrades gracefully if opencv is unavailable.
 """
+
 from __future__ import annotations
 
 import difflib
@@ -56,7 +57,7 @@ def cross_agreement(texts: dict[str, str]) -> dict:
     pairwise: dict[str, float] = {}
     avg: dict[str, list[float]] = {n: [] for n in names}
     for i, a in enumerate(names):
-        for b in names[i + 1:]:
+        for b in names[i + 1 :]:
             s = similarity(texts[a], texts[b])
             pairwise[f"{a}__vs__{b}"] = s
             avg[a].append(s)
@@ -94,8 +95,7 @@ def preprocess(path: str, grayscale: bool = True, denoise: bool = True, deskew: 
                 if abs(angle) > 0.3:
                     h, w = img.shape[:2]
                     M = cv2.getRotationMatrix2D((w // 2, h // 2), angle, 1.0)
-                    img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC,
-                                         borderMode=cv2.BORDER_REPLICATE)
+                    img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
                     notes.append(f"deskew({angle:.1f}deg)")
         out = Path(tempfile.gettempdir()) / f"ocrmcp_pre_{Path(path).stem}_{os.urandom(4).hex()}.png"
         cv2.imwrite(str(out), img)
