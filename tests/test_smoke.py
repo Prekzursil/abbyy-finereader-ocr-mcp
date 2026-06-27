@@ -1,8 +1,13 @@
 """Smoke test: render known text to a PNG, OCR it with RapidOCR, verify recovery
 and that evaluate() reports a low CER against the known string."""
+
+import importlib.util
+import os
 import sys
 import tempfile
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -10,6 +15,15 @@ from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 
 import engines as eng_mod  # noqa: E402
 import evaluation as ev  # noqa: E402
+
+# Live end-to-end checks against the real RapidOCR backend. Opt-in only: requires
+# both the heavy onnxruntime/PaddleOCR stack AND OCR_MCP_LIVE=1 (the first call
+# downloads ONNX models). The lean CI gate proves 100% coverage with mocked
+# backends in the other test modules, so this stays skipped there.
+pytestmark = pytest.mark.skipif(
+    os.environ.get("OCR_MCP_LIVE") != "1" or importlib.util.find_spec("rapidocr_onnxruntime") is None,
+    reason="live OCR smoke test (set OCR_MCP_LIVE=1 with rapidocr installed)",
+)
 
 KNOWN = "The quick brown fox jumps over the lazy dog 1234567890"
 
