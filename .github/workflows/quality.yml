@@ -86,4 +86,7 @@ jobs:
       - name: Resolve dependency set
         run: pip freeze | grep -vE '^-e ' > requirements.txt
       - name: osv-scanner (dependency vulnerabilities)
-        run: osv-scanner scan source -L requirements.txt:requirements.txt
+        # --no-resolve: requirements.txt is already the full pinned closure from
+        # pip freeze, so scan it flat (the transitive deps.dev resolver is flaky/
+        # network-bound and not needed here).
+        run: osv-scanner scan source --no-resolve -L requirements.txt:requirements.txt
