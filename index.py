@@ -14,12 +14,12 @@ import json
 import os
 from pathlib import Path
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 import engines as _engines
 import evaluation as _eval
 
-mcp = FastMCP("ocr")
+mcp = MCPServer("ocr")
 ENGINES = _engines.build_engines()
 DEFAULT_ENGINE = "rapidocr"
 
