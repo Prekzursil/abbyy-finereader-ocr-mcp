@@ -6,8 +6,8 @@ import sys
 from pathlib import Path
 
 import cv2
-import fitz
 import numpy as np
+import pymupdf
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -146,7 +146,7 @@ def test_preprocess_write_failure(monkeypatch, tmp_path):
 
 # ------------------------------------------------------------ pdf_to_images ----
 def _make_pdf(tmp_path: Path, pages: int = 3) -> str:
-    doc = fitz.open()
+    doc = pymupdf.open()
     for i in range(pages):
         page = doc.new_page()
         page.insert_text((72, 72), f"page {i + 1}")

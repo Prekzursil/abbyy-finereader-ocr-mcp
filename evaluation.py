@@ -108,11 +108,11 @@ def pdf_to_images(pdf_path: str, pages: str = "all", dpi: int = 300) -> tuple[li
     """Rasterize PDF pages to PNGs (PyMuPDF). `pages`='all' or '1-3,5'. Returns
     (image_paths, notes)."""
     notes: list[str] = []
-    import fitz  # PyMuPDF
+    import pymupdf  # the `fitz` alias raises a FutureWarning in PyMuPDF 2.0
 
     token = os.urandom(4).hex()
     out_paths: list[str] = []
-    with fitz.open(pdf_path) as doc:  # context manager closes even on error
+    with pymupdf.open(pdf_path) as doc:  # context manager closes even on error
         total = doc.page_count
         if pages == "all":
             idx = list(range(total))
@@ -135,7 +135,7 @@ def pdf_to_images(pdf_path: str, pages: str = "all", dpi: int = 300) -> tuple[li
                         notes.append(f"skipped invalid page: {part!r}")
             idx = [i for i in idx if 0 <= i < total]
         zoom = dpi / 72.0
-        mat = fitz.Matrix(zoom, zoom)
+        mat = pymupdf.Matrix(zoom, zoom)
         tmp = Path(tempfile.gettempdir())
         for i in idx:
             pix = doc.load_page(i).get_pixmap(matrix=mat)
