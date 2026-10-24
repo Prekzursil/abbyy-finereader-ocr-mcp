@@ -12,7 +12,6 @@ dist/
 .coverage.*
 htmlcov/
 coverage.xml
-requirements.txt
 
 # OCR model caches / temp artifacts
 *.onnx
