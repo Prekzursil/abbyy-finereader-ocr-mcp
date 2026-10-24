@@ -1,0 +1,100 @@
+# opengrep / semgrep ignore — gate 4 (SAST). Copy to the repo ROOT as
+# `.semgrepignore`, then delete any entry your repo does not have.
+#
+# ── WHY THIS FILE IS MANDATORY, not optional ────────────────────────────────
+#
+# If NO `.semgrepignore` exists in the scanned root, the engine falls back to a
+# BUILT-IN ignore template that drops your test code. Nobody in this fleet chose
+# that. Measured 2026-08-11 on the pinned CI engine (opengrep v1.22.0 CLI on
+# Linux — the exact build gate 4 installs), with a controlled detector and one
+# variable changed at a time:
+#
+#   file                       content                                result
+#   ─────────────────────────  ─────────────────────────────────────  ────────
+#   src/inline.go              db.Query(fmt.Sprintf(...))             FIRES
+#   tests/inline.go            byte-identical to the file above       SILENT
+#
+# `paths.scanned` listed 3 of 4 files and `paths.skipped` reported `none`, so
+# NOTHING in the gate output tells you a test tree was dropped. Pointing the
+# scanner directly at `tests/` returns `paths.scanned: []` — an explicit path
+# argument does NOT override it.
+#
+# EXACTLY WHAT THE BUILT-IN TEMPLATE DROPS, enumerated by scanning one identical
+# vulnerable file per candidate path with and without a `.semgrepignore`:
+#
+#   DROPPED                       KEPT (for contrast — the set is narrower
+#   ────────────────────────────  than "anything that looks like a test")
+#   engine_test.go                test_app.py
+#   pkg/engine_test.go            app_test.py
+#   test/helper.go                conftest.py
+#   tests/helper.go               spec/thing.py
+#   tests/test_app.py             src/app.test.ts
+#                                 src/app.spec.ts
+#                                 __tests__/app.ts
+#                                 e2e/app.ts
+#                                 testdata/sample.go
+#
+# So the rule is: `*_test.go` AT ANY DEPTH, plus the `test/` and `tests/`
+# directories. Python and TypeScript test FILENAMES are not excluded — only the
+# two directories are. That asymmetry matters: a Go repo following the language's
+# own `foo_test.go` convention has its ENTIRE test suite dropped no matter where
+# the files sit, which is why DevExtreme-Filter-Go-Language lost 49 files.
+#
+# The engine drops the built-in template as soon as ANY `.semgrepignore` exists,
+# so merely shipping this file restores the test code; the entries below are then
+# a DELIBERATE choice you can review.
+#
+# Blast radius when adopted, measured against real clones with each caller's own
+# `opengrep-paths`: +49 newly-visible files in DevExtreme-Filter-Go-Language
+# (its entire `_test.go` suite, which gate 4 had never once looked at), and
+# ZERO new findings in 10 of the 11 public repos that ship `.quality/opengrep`.
+#
+# ── ANCHORING: `**/vendor/` ALONE IS A SILENT LEAK ──────────────────────────
+#
+# A `**/`-prefixed entry does NOT match the ROOT-level directory of that name.
+# Measured with a positive control — three identical vulnerable files:
+#
+#   entry            rule fired on
+#   ───────────────  ─────────────────────────────────────────────────────────
+#   (none)           src/a.go, vendor/pkg/b.go, app/vendor/pkg/c.go
+#   `**/vendor/`     src/a.go, vendor/pkg/b.go        <-- root vendor LEAKED
+#   `vendor/`        src/a.go                          <-- both trees excluded
+#
+# There is no warning on stderr when this happens. So every directory exclusion
+# below ships BOTH the root-anchored and the nested form.
+#
+# ── RULES FOR EDITING ───────────────────────────────────────────────────────
+#
+# 1. NEVER add `test/`, `tests/`, `spec/` or `__tests__/`. First-party test code
+#    is first-party code: it handles credentials, builds queries, and shells
+#    out. Re-excluding it restores the exact hole this file closes.
+# 2. Keep the list narrow and greppable, and give every entry a written reason.
+# 3. Do not use this file to make a finding go away. An exclusion is a statement
+#    about SCOPE ("this is not our source"), never about severity.
+
+.git/
+
+# Vendored third-party source. Not ours to fix, and upstream style trips
+# first-party rules. Secrets in these trees are still covered by gitleaks
+# (gate 5), which scans them independently of this file.
+vendor/
+**/vendor/
+vendor_src/
+**/vendor_src/
+node_modules/
+**/node_modules/
+
+# Installed dependencies (virtualenvs). Third-party bytes, not source.
+.venv/
+**/.venv/
+venv/
+**/venv/
+
+# Build output — generated from source that gate 4 already scans, so scanning
+# it again only duplicates findings against files nobody edits.
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
