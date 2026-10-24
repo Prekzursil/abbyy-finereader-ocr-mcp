@@ -67,3 +67,21 @@ jobs:
         env:
           SEMGREP_SEND_METRICS: "off"
         run: /tmp/semgrep-venv/bin/semgrep scan --config p/python --config p/security-audit --error --metrics off .
+
+  # One fail-closed context for branch protection: green only when every
+  # extended scan above succeeded (a skipped or cancelled scan fails it).
+  extended-scans:
+    name: extended-scans
+    if: always()
+    needs: [gitleaks-history, semgrep-registry]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every extended scan passed
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          for r in $RESULTS; do
+            [ "$r" = success ] || { echo "an extended scan ended with '$r' (all: $RESULTS)"; exit 1; }
+          done
+          echo "all extended scans passed: $RESULTS"
