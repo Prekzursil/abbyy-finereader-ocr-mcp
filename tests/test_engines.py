@@ -320,6 +320,21 @@ def test_finereader_success_first_poll(monkeypatch, tmp_path):
     assert any("confidence" in w for w in r.warnings)
 
 
+def test_finereader_holds_clipboard_lock(monkeypatch, tmp_path):
+    # MCP 2 runs sync tools on worker threads: the clipboard round trip must be serial
+    held = []
+
+    def paste():
+        held.append(eng._CLIPBOARD_LOCK.locked())
+        return "TEXT"
+
+    _setup_finereader(monkeypatch, paste_behaviour=paste)
+    r = eng.FineReaderEngine().ocr_image(_real_file(tmp_path))
+    assert r.text == "TEXT"
+    assert held and all(held)
+    assert not eng._CLIPBOARD_LOCK.locked()
+
+
 def test_finereader_copy_sentinel_fails(monkeypatch, tmp_path):
     _setup_finereader(monkeypatch, paste_behaviour=lambda: "TEXT", copy_exc=RuntimeError("noclip"))
     r = eng.FineReaderEngine().ocr_image(_real_file(tmp_path))
