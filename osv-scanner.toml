@@ -1,0 +1,13 @@
+# osv-scanner configuration for the lean gate's dependency gate (gate 6).
+# Seeded by quality-zero-platform's fleet baseline (docs/FLEET-BASELINE.md).
+#
+# Zero tolerance: a known advisory of ANY severity fails the gate. Fix it by
+# upgrading the dependency (Dependabot groups the security updates into one
+# pull request per ecosystem). An ignore is only for an advisory that provably
+# cannot affect this repository, and it must carry a written reason and an
+# expiry date so it is reviewed again:
+#
+# [[IgnoredVulns]]
+# id = "GHSA-xxxx-xxxx-xxxx"
+# ignoreUntil = 2027-01-31
+# reason = "Why this advisory cannot affect this repository, with evidence."

@@ -1,6 +1,6 @@
-"""Full-coverage unit tests for index.py (the FastMCP tool layer).
+"""Full-coverage unit tests for index.py (the MCP server tool layer).
 
-FastMCP's @mcp.tool() returns the original function, so the tools are called
+MCPServer's @mcp.tool() returns the original function, so the tools are called
 directly. Engines are replaced with fakes; OCR backends are never invoked.
 """
 

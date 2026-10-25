@@ -21,12 +21,18 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
 # ---- language code maps (canonical = ISO 639-1 'en','de','fr',...) -----------
+# FineReader hands its result back through the one desktop clipboard, and MCP 2
+# runs synchronous tools on worker threads: overlapping FineReader calls must
+# not read each other's text or sentinel, so the clipboard round trip is serial.
+_CLIPBOARD_LOCK = threading.Lock()
+
 _TESS_LANG = {
     "en": "eng",
     "de": "deu",
@@ -270,6 +276,11 @@ class FineReaderEngine(Engine):
         if not exe:
             r.error = "FineReader not found"
             return r
+        with _CLIPBOARD_LOCK:
+            self._ocr_via_clipboard(path, lang, exe, r)
+        return r
+
+    def _ocr_via_clipboard(self, path: str, lang: str, exe: str, r: OcrResult) -> None:
         timeout_s = self.timeout_s
         try:
             import pyperclip
@@ -321,13 +332,12 @@ class FineReaderEngine(Engine):
                     "no clipboard result (FineReader may need a logged-in "
                     "interactive session, or the doc produced no text)"
                 )
-                return r
+                return
             r.text = text.strip()
             r.lines = [OcrLine(text=line, confidence=None) for line in r.text.splitlines() if line.strip()]
             r.warnings.append("FineReader CLI does not expose confidence scores.")
         except Exception as e:
             r.error = f"finereader failure: {e}"
-        return r
 
 
 def build_engines() -> dict[str, Engine]:
