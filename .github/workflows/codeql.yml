@@ -30,7 +30,7 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@cc4c6ec12c2b1f204f79414a717e82472e98cb58
+    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@d441b32790c4aa10e1f209539ec0ddc25114968b
     with:
       repo_slug: ${{ github.repository }}
       event_name: ${{ github.event_name }}
