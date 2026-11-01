@@ -12,6 +12,7 @@ import contextlib
 import glob as _glob
 import json
 import os
+import sys
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
@@ -24,22 +25,53 @@ ENGINES = _engines.build_engines()
 DEFAULT_ENGINE = "rapidocr"
 
 # Optional sandbox: if OCR_MCP_ALLOWED_DIRS is set (os.pathsep-separated), tools may
-# only read files under those directories. Unset = read anything the process can
-# (fine for a trusted local client; see the README security note).
-_ALLOWED = [Path(p).resolve() for p in os.environ.get("OCR_MCP_ALLOWED_DIRS", "").split(os.pathsep) if p.strip()]
+# only read files under those directories. Unset = any EXISTING local file the
+# process can read (fine for a trusted local client; see the README security note).
+# Every untrusted path entering the server goes through _safe_path(), which
+# resolves it and enforces the configured sandbox BEFORE any engine or file
+# operation sees it (single validation choke point; CodeQL py/path-injection).
 
 
-def _check_path(path: str) -> str | None:
-    """Return an error string if `path` is outside the allowlist, else None."""
-    if not _ALLOWED:
-        return None
+def _load_allowed_dirs() -> list[Path]:
+    """Parse and validate OCR_MCP_ALLOWED_DIRS.
+
+    Only existing directories are kept: an environment entry is untrusted
+    input, so a non-directory value is dropped (with a note) instead of
+    flowing anywhere as a path.
+    """
+    allowed: list[Path] = []
+    for raw in os.environ.get("OCR_MCP_ALLOWED_DIRS", "").split(os.pathsep):
+        if not raw.strip():
+            continue
+        candidate = Path(raw).resolve()
+        if candidate.is_dir():
+            allowed.append(candidate)
+        else:
+            print(f"ocr-mcp: OCR_MCP_ALLOWED_DIRS entry is not a directory, ignoring: {candidate}", file=sys.stderr)
+    return allowed
+
+
+_ALLOWED = _load_allowed_dirs()
+
+
+def _safe_path(path: str) -> Path | str:
+    """Validate an untrusted tool path and return the resolved Path, or an error string.
+
+    When a sandbox is configured the resolved path must stay inside one of the
+    allowed directories; when it is not, resolution alone sanitizes the input
+    (the documented trusted-local mode - callers still apply their own
+    existence checks). Callers use the returned Path for every subsequent
+    file operation - never the raw input string.
+    """
+    if chr(0) in path:
+        return "invalid path: embedded NUL byte"
     try:
         p = Path(path).resolve()
     except Exception as e:
         return f"invalid path: {e}"
-    if not any(p == a or a in p.parents for a in _ALLOWED):
+    if _ALLOWED and not any(p == a or a in p.parents for a in _ALLOWED):
         return f"path outside OCR_MCP_ALLOWED_DIRS: {p}"
-    return None
+    return p
 
 
 def _resolve_engine(engine: str | None) -> str:
@@ -75,16 +107,16 @@ def ocr_image(path: str, engine: str = "auto", lang: str = "en", preprocess: boo
 
     Returns JSON: {engine, ok, text, mean_confidence, line_count,
     low_confidence_count, lines:[{text,confidence,bbox}], warnings}."""
-    err = _check_path(path)
-    if err:
-        return json.dumps({"error": err})
+    safe = _safe_path(path)
+    if isinstance(safe, str):
+        return json.dumps({"error": safe})
     try:
         name = _resolve_engine(engine)
     except ValueError as e:
         return json.dumps({"error": str(e)})
-    use_path, pre_notes = (path, [])
+    use_path, pre_notes = (str(safe), [])
     if preprocess:
-        use_path, pre_notes = _eval.preprocess(path)
+        use_path, pre_notes = _eval.preprocess(str(safe))
     res = ENGINES[name].ocr_image(use_path, lang=lang)
     d = res.to_dict()
     if pre_notes:
@@ -103,17 +135,17 @@ def ocr_pdf(path: str, engine: str = "auto", lang: str = "en", pages: str = "all
         dpi: rasterization DPI (default 300; higher = slower, more accurate).
 
     Returns JSON: {page_count, pages:[{page, ...ocr_image result...}], full_text}."""
-    err = _check_path(path)
-    if err:
-        return json.dumps({"error": err})
+    safe = _safe_path(path)
+    if isinstance(safe, str):
+        return json.dumps({"error": safe})
     try:
         name = _resolve_engine(engine)
     except ValueError as e:
         return json.dumps({"error": str(e)})
-    if not Path(path).is_file():
-        return json.dumps({"error": f"file not found: {path}"})
+    if not safe.is_file():
+        return json.dumps({"error": f"file not found: {safe}"})
     try:
-        imgs, notes = _eval.pdf_to_images(path, pages=pages, dpi=dpi)
+        imgs, notes = _eval.pdf_to_images(str(safe), pages=pages, dpi=dpi)
     except Exception as e:
         return json.dumps({"error": f"pdf rasterization failed: {e}"})
     page_results = []
@@ -160,18 +192,18 @@ def batch_ocr(paths_or_glob: str, engine: str = "auto", lang: str = "en") -> str
         paths = _glob.glob(s)
     if not paths:
         return json.dumps({"error": f"no files matched: {paths_or_glob}"})
-    if _ALLOWED:
-        blocked = [p for p in paths if _check_path(p)]
-        if blocked:
-            return json.dumps(
-                {
-                    "error": f"{len(blocked)} path(s) outside OCR_MCP_ALLOWED_DIRS",
-                    "examples": blocked[:3],
-                }
-            )
+    validated = [(p, _safe_path(p)) for p in paths]
+    blocked = [str(p) for p, sp in validated if isinstance(sp, str)]
+    if blocked:
+        return json.dumps(
+            {
+                "error": f"{len(blocked)} path(s) failed validation (outside OCR_MCP_ALLOWED_DIRS or not a file)",
+                "examples": blocked[:3],
+            }
+        )
     results = []
-    for p in paths:
-        res = ENGINES[name].ocr_image(p, lang=lang).to_dict()
+    for p, safe_p in validated:
+        res = ENGINES[name].ocr_image(str(safe_p), lang=lang).to_dict()
         results.append(
             {
                 "path": p,
@@ -226,13 +258,14 @@ def evaluate_accuracy(
 
     Returns JSON: {cer, wer, char_accuracy_pct, word_accuracy_pct,
     substitutions, deletions, insertions, hits}."""
-    for pth in (ground_truth_path, ocr_path):
-        if pth and (err := _check_path(pth)):
-            return json.dumps({"error": err})
-    gt = Path(ground_truth_path)
-    if not gt.is_file():
+    if not ground_truth_path:
+        return json.dumps({"error": "ground truth not found: (empty path)"})
+    gt_safe = _safe_path(ground_truth_path)
+    if isinstance(gt_safe, str):
+        return json.dumps({"error": gt_safe})
+    if not gt_safe.is_file():
         return json.dumps({"error": f"ground truth not found: {ground_truth_path}"})
-    reference = gt.read_text(encoding="utf-8", errors="replace")
+    reference = gt_safe.read_text(encoding="utf-8", errors="replace")
     hypothesis = ocr_text
     used = {"source": "provided_text"}
     if not hypothesis and ocr_path:
@@ -240,14 +273,16 @@ def evaluate_accuracy(
             name = _resolve_engine(engine)
         except ValueError as e:
             return json.dumps({"error": str(e)})
-        p = Path(ocr_path)
-        if not p.is_file():
+        ocr_safe = _safe_path(ocr_path)
+        if isinstance(ocr_safe, str):
+            return json.dumps({"error": ocr_safe})
+        if not ocr_safe.is_file():
             return json.dumps({"error": f"ocr_path not found: {ocr_path}"})
-        if p.suffix.lower() == ".pdf":
-            imgs, _ = _eval.pdf_to_images(ocr_path)
+        if ocr_safe.suffix.lower() == ".pdf":
+            imgs, _ = _eval.pdf_to_images(str(ocr_safe))
             hypothesis = "\n\n".join(ENGINES[name].ocr_image(i, lang=lang).text for i in imgs)
         else:
-            hypothesis = ENGINES[name].ocr_image(ocr_path, lang=lang).text
+            hypothesis = ENGINES[name].ocr_image(str(ocr_safe), lang=lang).text
         used = {"source": "ocr", "engine": name}
     if not hypothesis:
         return json.dumps({"error": "provide ocr_text or ocr_path"})

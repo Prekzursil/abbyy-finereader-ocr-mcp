@@ -1,36 +1,37 @@
-name: CodeQL
-
-# Code scanning (Python). Runs on push/PR to main and nightly, per the lean
-# "0 CodeQL code-scanning alerts" target for public repos.
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: "27 3 * * *"
-  workflow_dispatch:
+# CodeQL baseline — thin caller of quality-zero-platform's reusable workflow.
+#
+# Replaces the previous in-repo wrapper (python, security-and-quality) with
+# the platform-managed analysis: languages resolved from the repo's QZP
+# profile (actions + python), fail-closed unless the analysis succeeds, and
+# every action the wrapper runs is SHA-pinned by the platform. The platform
+# is checked out at this file's own workflow SHA (job.workflow_sha), so a PR
+# head can never pick or drift from the scripts it runs.
+name: codeql
 
 permissions:
+  actions: read
   contents: read
   security-events: write
 
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  merge_group:
+    types: [checks_requested]
+  schedule:
+    - cron: "27 3 * * 1"
+  workflow_dispatch:
+
 jobs:
-  analyze:
-    name: Analyze (python)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: python
-          queries: security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
-        with:
-          category: "/language:python"
+  codeql:
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@cc4c6ec12c2b1f204f79414a717e82472e98cb58
+    with:
+      repo_slug: ${{ github.repository }}
+      event_name: ${{ github.event_name }}
+      sha: ${{ github.event.pull_request.head.sha || github.sha }}

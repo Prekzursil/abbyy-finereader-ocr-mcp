@@ -1,0 +1,7 @@
+# gitleaks allowlist — patterns that LOOK like secrets in this repo but are
+# not. Keep this list EMPTY unless a verified false positive appears; do not
+# preemptively silence rules.
+title = "gitleaks config"
+
+[extend]
+useDefault = true

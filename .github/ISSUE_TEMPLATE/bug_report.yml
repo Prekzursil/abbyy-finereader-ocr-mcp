@@ -1,0 +1,32 @@
+name: Bug report
+description: Something behaves incorrectly or produces a wrong result.
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Also state what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands, from a fresh clone, including toolchain versions.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit / release
+      description: SHA or tag you saw the behavior on.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Paste logs or failing check output. Avoid secrets.
+    validations:
+      required: false
