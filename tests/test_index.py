@@ -7,6 +7,7 @@ directly. Engines are replaced with fakes; OCR backends are never invoked.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -41,27 +42,44 @@ def fake_engines(monkeypatch):
     return engines
 
 
-# ----------------------------------------------------------- _check_path ------
-def test_check_path_no_allowlist(monkeypatch):
+# ------------------------------------------------------- _load_allowed_dirs ---
+def test_load_allowed_dirs_normalizes_and_skips_empty(monkeypatch, tmp_path):
+    sub = tmp_path / "sub"
+    monkeypatch.setattr(ix.os, "environ", {"OCR_MCP_ALLOWED_DIRS": f"{sub}{os.pathsep}  {os.pathsep}{sub / 'x'}"})
+    # lexical only: no fs validation of env entries (normpath, empties skipped)
+    assert ix._load_allowed_dirs() == [os.path.normpath(str(sub)), os.path.normpath(str(sub / "x"))]
+
+
+def test_load_allowed_dirs_unset(monkeypatch):
+    monkeypatch.setattr(ix.os, "environ", {})
+    assert ix._load_allowed_dirs() == []
+
+
+# ------------------------------------------------------------ _safe_path ------
+def test_safe_path_no_allowlist_returns_resolved(monkeypatch):
     monkeypatch.setattr(ix, "_ALLOWED", [])
-    assert ix._check_path("/anything") is None
+    result = ix._safe_path("x.png")
+    assert isinstance(result, Path)
+    assert result == Path("x.png").resolve()
 
 
-def test_check_path_allowed(monkeypatch, tmp_path):
-    monkeypatch.setattr(ix, "_ALLOWED", [tmp_path.resolve()])
+def test_safe_path_allowed(monkeypatch, tmp_path):
+    monkeypatch.setattr(ix, "_ALLOWED", [str(tmp_path.resolve())])
     f = tmp_path / "x.png"
     f.write_text("x")
-    assert ix._check_path(str(f)) is None
+    result = ix._safe_path(str(f))
+    assert isinstance(result, Path)
+    assert result == f.resolve()
 
 
-def test_check_path_blocked(monkeypatch, tmp_path):
-    monkeypatch.setattr(ix, "_ALLOWED", [tmp_path.resolve()])
-    assert "outside" in ix._check_path("C:/elsewhere/x.png")
+def test_safe_path_blocked(monkeypatch, tmp_path):
+    monkeypatch.setattr(ix, "_ALLOWED", [str(tmp_path.resolve())])
+    assert "outside" in ix._safe_path("C:/elsewhere/x.png")
 
 
-def test_check_path_invalid(monkeypatch):
-    monkeypatch.setattr(ix, "_ALLOWED", [Path("C:/a").resolve()])
-    assert ix._check_path("bad\x00path").startswith("invalid path")
+def test_safe_path_invalid(monkeypatch):
+    monkeypatch.setattr(ix, "_ALLOWED", [str(Path("C:/a").resolve())])
+    assert ix._safe_path("bad\x00path").startswith("invalid path")
 
 
 # --------------------------------------------------------- _resolve_engine ----
@@ -89,7 +107,7 @@ def test_list_engines(fake_engines):
 
 # -------------------------------------------------------------- ocr_image -----
 def test_ocr_image_blocked(monkeypatch, tmp_path):
-    monkeypatch.setattr(ix, "_ALLOWED", [tmp_path.resolve()])
+    monkeypatch.setattr(ix, "_ALLOWED", [str(tmp_path.resolve())])
     out = json.loads(ix.ocr_image("C:/other/x.png"))
     assert "error" in out
 
@@ -116,7 +134,7 @@ def test_ocr_image_with_preprocess(fake_engines, monkeypatch):
 
 # --------------------------------------------------------------- ocr_pdf ------
 def test_ocr_pdf_blocked(monkeypatch):
-    monkeypatch.setattr(ix, "_ALLOWED", [Path("C:/allowed").resolve()])
+    monkeypatch.setattr(ix, "_ALLOWED", [str(Path("C:/allowed").resolve())])
     out = json.loads(ix.ocr_pdf("C:/other/x.pdf"))
     assert "error" in out
 
@@ -187,7 +205,7 @@ def test_batch_ocr_glob_success(fake_engines, monkeypatch, tmp_path):
 
 
 def test_batch_ocr_allowlist_blocks(fake_engines, monkeypatch, tmp_path):
-    monkeypatch.setattr(ix, "_ALLOWED", [tmp_path.resolve()])
+    monkeypatch.setattr(ix, "_ALLOWED", [str(tmp_path.resolve())])
     out = json.loads(ix.batch_ocr('["C:/evil/a.png"]'))
     assert "outside" in out["error"]
     assert out["examples"]
@@ -196,7 +214,7 @@ def test_batch_ocr_allowlist_blocks(fake_engines, monkeypatch, tmp_path):
 def test_batch_ocr_allowlist_passes(fake_engines, monkeypatch, tmp_path):
     f = tmp_path / "ok.png"
     f.write_text("x")
-    monkeypatch.setattr(ix, "_ALLOWED", [tmp_path.resolve()])
+    monkeypatch.setattr(ix, "_ALLOWED", [str(tmp_path.resolve())])
     out = json.loads(ix.batch_ocr(json.dumps([str(f)])))
     assert out["count"] == 1
 
@@ -220,7 +238,7 @@ def test_compare_engines(monkeypatch):
 
 # -------------------------------------------------------- evaluate_accuracy ---
 def test_evaluate_accuracy_blocked(monkeypatch, tmp_path):
-    monkeypatch.setattr(ix, "_ALLOWED", [tmp_path.resolve()])
+    monkeypatch.setattr(ix, "_ALLOWED", [str(tmp_path.resolve())])
     out = json.loads(ix.evaluate_accuracy("C:/evil/gt.txt", ocr_text="hi"))
     assert "error" in out
 
@@ -283,3 +301,29 @@ def test_evaluate_accuracy_ocr_pdf(fake_engines, monkeypatch, tmp_path):
     monkeypatch.setattr(ix._eval, "pdf_to_images", lambda *a, **k: (["p1.png", "p2.png"], []))
     out = json.loads(ix.evaluate_accuracy(str(gt), ocr_path=str(pdf)))
     assert out["evaluated"]["source"] == "ocr"
+
+
+# ------------------------------------------- _safe_path / evaluate_accuracy ---
+def test_safe_path_resolve_raises(monkeypatch):
+    monkeypatch.setattr(ix, "_ALLOWED", [])
+
+    class BoomPath(type(Path())):
+        def resolve(self, strict=False):
+            raise OSError("boom")
+
+    real_path = ix.Path
+    monkeypatch.setattr(ix, "Path", lambda p=".", *a, **k: BoomPath(p) if p == "weird" else real_path(p))
+    assert ix._safe_path("weird").startswith("invalid path")
+
+
+def test_evaluate_accuracy_empty_gt(fake_engines):
+    out = json.loads(ix.evaluate_accuracy("", ocr_text="hi"))
+    assert out["error"].startswith("ground truth not found")
+
+
+def test_evaluate_accuracy_ocr_path_outside_sandbox(fake_engines, monkeypatch, tmp_path):
+    gt = tmp_path / "gt.txt"
+    gt.write_text("ref", encoding="utf-8")
+    monkeypatch.setattr(ix, "_ALLOWED", [str(tmp_path.resolve())])
+    out = json.loads(ix.evaluate_accuracy(str(gt), ocr_path="C:/evil/x.png"))
+    assert "outside" in out["error"]
