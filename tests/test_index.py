@@ -307,6 +307,7 @@ def test_evaluate_accuracy_ocr_pdf(fake_engines, monkeypatch, tmp_path):
     out = json.loads(ix.evaluate_accuracy(str(gt), ocr_path=str(pdf)))
     assert out["evaluated"]["source"] == "ocr"
 
+
 # ------------------------------------------- _safe_path / evaluate_accuracy ---
 def test_safe_path_resolve_raises(monkeypatch):
     monkeypatch.setattr(ix, "_ALLOWED", [])
@@ -331,4 +332,3 @@ def test_evaluate_accuracy_ocr_path_outside_sandbox(fake_engines, monkeypatch, t
     monkeypatch.setattr(ix, "_ALLOWED", [tmp_path.resolve()])
     out = json.loads(ix.evaluate_accuracy(str(gt), ocr_path="C:/evil/x.png"))
     assert "outside" in out["error"]
-
