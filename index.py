@@ -12,7 +12,6 @@ import contextlib
 import glob as _glob
 import json
 import os
-import sys
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
@@ -32,23 +31,22 @@ DEFAULT_ENGINE = "rapidocr"
 # operation sees it (single validation choke point; CodeQL py/path-injection).
 
 
-def _load_allowed_dirs() -> list[Path]:
-    """Parse and validate OCR_MCP_ALLOWED_DIRS.
+def _load_allowed_dirs() -> list[str]:
+    """Parse OCR_MCP_ALLOWED_DIRS into lexically-normalized directory strings.
 
-    Only existing directories are kept: an environment entry is untrusted
-    input, so a non-directory value is dropped (with a note) instead of
-    flowing anywhere as a path.
+    Environment values are UNTRUSTED input under the remote_and_local threat
+    model, so no filesystem operation is ever performed on them here (no
+    resolve()/is_dir() - CodeQL py/path-injection): normalization is purely
+    lexical (os.path.normpath), and containment against a never-existing
+    directory can never match, so bogus entries are inert by construction.
+    Operators should list real directories (resolved, no symlinks); a
+    symlinked entry will not contain its target's resolved path.
     """
-    allowed: list[Path] = []
-    for raw in os.environ.get("OCR_MCP_ALLOWED_DIRS", "").split(os.pathsep):
-        if not raw.strip():
-            continue
-        candidate = Path(raw).resolve()
-        if candidate.is_dir():
-            allowed.append(candidate)
-        else:
-            print(f"ocr-mcp: OCR_MCP_ALLOWED_DIRS entry is not a directory, ignoring: {candidate}", file=sys.stderr)
-    return allowed
+    return [
+        os.path.normpath(entry)
+        for entry in os.environ.get("OCR_MCP_ALLOWED_DIRS", "").split(os.pathsep)
+        if entry.strip()
+    ]
 
 
 _ALLOWED = _load_allowed_dirs()
@@ -69,7 +67,8 @@ def _safe_path(path: str) -> Path | str:
         p = Path(path).resolve()
     except Exception as e:
         return f"invalid path: {e}"
-    if _ALLOWED and not any(p == a or a in p.parents for a in _ALLOWED):
+    ps = os.path.normpath(str(p))
+    if _ALLOWED and not any(ps == a or ps.startswith(a + os.sep) for a in _ALLOWED):
         return f"path outside OCR_MCP_ALLOWED_DIRS: {p}"
     return p
 
