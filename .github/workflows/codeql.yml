@@ -1,11 +1,16 @@
-# CodeQL baseline — thin caller of quality-zero-platform's reusable workflow.
+# Advanced CodeQL analysis (fleet standard 2026-11): in-repo workflow with BOTH
+# query suites — security-extended + security-and-quality (strictly subsumes the
+# default suite AND the extended suite) — matrixed over every language this
+# repo actually ships (Python modules + GitHub Actions workflows), triggered on
+# push to main, pull_request targeting main, and a weekly schedule; each
+# language's SARIF is uploaded to code scanning under its own category.
 #
-# Replaces the previous in-repo wrapper (python, security-and-quality) with
-# the platform-managed analysis: languages resolved from the repo's QZP
-# profile (actions + python), fail-closed unless the analysis succeeds, and
-# every action the wrapper runs is SHA-pinned by the platform. The platform
-# is checked out at this file's own workflow SHA (job.workflow_sha), so a PR
-# head can never pick or drift from the scripts it runs.
+# Replaces the QZP reusable-codeql caller, which pins queries to
+# security-and-quality only (no input to add security-extended). The QZP lean
+# gate (quality.yml) still runs beside this: ruff, gitleaks, opengrep SAST,
+# osv-scanner, basedpyright, and pytest with the strict 100% line+branch
+# coverage gate. A fail-closed `CodeQL` gate job keeps the required
+# branch-protection check unsatisfiable by a skipped or cancelled analysis.
 name: codeql
 
 permissions:
@@ -25,13 +30,53 @@ on:
   workflow_dispatch:
 
 jobs:
-  codeql:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       actions: read
       contents: read
       security-events: write
-    uses: Prekzursil/quality-zero-platform/.github/workflows/reusable-codeql.yml@d441b32790c4aa10e1f209539ec0ddc25114968b
-    with:
-      repo_slug: ${{ github.repository }}
-      event_name: ${{ github.event_name }}
-      sha: ${{ github.event.pull_request.head.sha || github.sha }}
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, actions]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          # Both suites per the fleet CODEQL DECISION — strictly subsumes the
+          # default suite and the extended suite.
+          queries: security-extended,security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # Fail-closed gate: the branch-protection required check `CodeQL` must never
+  # be satisfied by a skipped, cancelled, or failed analysis.
+  codeql-gate:
+    name: CodeQL
+    if: always()
+    needs: [analyze]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every language analysis passed
+        env:
+          RESULTS: ${{ join(needs.analyze.*.result, ' ') }}
+        run: |
+          set -euo pipefail
+          for r in $RESULTS; do
+            [ "$r" = success ] || { echo "::error title=CodeQL gate::an analysis ended with '$r' (all: $RESULTS)"; exit 1; }
+          done
+          echo "all CodeQL analyses passed: $RESULTS"
