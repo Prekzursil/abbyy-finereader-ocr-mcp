@@ -73,9 +73,13 @@ jobs:
     steps:
       - name: Every language analysis passed
         env:
-          RESULTS: ${{ join(needs.analyze.*.result, ' ') }}
+          # needs.*.result across the needs map (needs.analyze.*.result
+          # evaluates empty for a single matrix need, which once let this
+          # gate pass vacuously); the empty guard closes that hole for good.
+          RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           set -euo pipefail
+          [ -n "$RESULTS" ] || { echo "::error title=CodeQL gate::no analysis results to gate on"; exit 1; }
           for r in $RESULTS; do
             [ "$r" = success ] || { echo "::error title=CodeQL gate::an analysis ended with '$r' (all: $RESULTS)"; exit 1; }
           done
