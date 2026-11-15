@@ -74,7 +74,7 @@ opencv-python==5.0.0.93
     # via rapidocr-onnxruntime
 opencv-python-headless==5.0.0.93
     # via abbyy-finereader-ocr-mcp (pyproject.toml)
-opentelemetry-api==1.45.1
+opentelemetry-api==1.45.2
     # via mcp
 packaging==26.3
     # via
