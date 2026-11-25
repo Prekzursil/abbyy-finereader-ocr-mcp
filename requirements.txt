@@ -118,7 +118,7 @@ pyperclip==1.11.0
     # via abbyy-finereader-ocr-mcp (pyproject.toml)
 pytesseract==0.3.13
     # via abbyy-finereader-ocr-mcp (pyproject.toml)
-pytest==9.1.1
+pytest==9.2.0
     # via
     #   abbyy-finereader-ocr-mcp (pyproject.toml)
     #   pytest-cov
