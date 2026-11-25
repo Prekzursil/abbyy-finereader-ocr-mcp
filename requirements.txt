@@ -56,7 +56,7 @@ mcp-types==2.3.0
     # via mcp
 networkx==3.7
     # via pymupdf
-numpy==2.5.4
+numpy==2.5.5
     # via
     #   abbyy-finereader-ocr-mcp (pyproject.toml)
     #   onnxruntime
