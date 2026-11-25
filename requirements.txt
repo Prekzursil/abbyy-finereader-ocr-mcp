@@ -124,7 +124,7 @@ pytest==9.1.1
     #   pytest-cov
 pytest-cov==7.1.0
     # via abbyy-finereader-ocr-mcp (pyproject.toml)
-python-multipart==0.0.32
+python-multipart==0.0.34
     # via mcp
 pywin32==312 ; sys_platform == 'win32'
     # via mcp
