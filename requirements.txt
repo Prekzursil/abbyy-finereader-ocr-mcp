@@ -110,7 +110,7 @@ pyjwt==2.15.1
     # via mcp
 pymupdf==2.0
     # via abbyy-finereader-ocr-mcp (pyproject.toml)
-pymupdf-layout==2.0
+pymupdf-layout==2.1
     # via pymupdf
 pymupdf4llm==2.0
     # via pymupdf
