@@ -2,7 +2,7 @@
 #    uv pip compile pyproject.toml --extra test --universal --python-version 3.12 -o requirements.txt
 annotated-types==0.8.0
     # via pydantic
-anyio==4.15.1
+anyio==4.16.0
     # via
     #   httpx2
     #   mcp
