@@ -72,7 +72,7 @@ onnxruntime==1.31.0
     #   rapidocr-onnxruntime
 opencv-python==5.0.0.93
     # via rapidocr-onnxruntime
-opencv-python-headless==5.0.0.93
+opencv-python-headless==5.1.0.95
     # via abbyy-finereader-ocr-mcp (pyproject.toml)
 opentelemetry-api==1.45.2
     # via mcp
